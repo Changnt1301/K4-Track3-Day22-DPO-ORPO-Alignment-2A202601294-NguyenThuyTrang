@@ -62,6 +62,27 @@ assert ADAPTER_DIR.exists(), f"NB1 must run first — {ADAPTER_DIR} missing"
 tokenizer = AutoTokenizer.from_pretrained(ADAPTER_DIR)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
+
+# Defensive: NB1 saves a chat_template fallback into the adapter dir (base Qwen2.5
+# checkpoints don't ship one), but re-check here in case you skipped NB1 and copied
+# in an older adapter that predates this fix.
+if tokenizer.chat_template is None:
+    tokenizer.chat_template = (
+        "{%- if messages[0]['role'] == 'system' %}"
+        "{{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}"
+        "{%- else %}"
+        "{{- '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- for message in messages %}"
+        "{%- if message['role'] != 'system' %}"
+        "{{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}"
+        "{{- '<|im_start|>assistant\n' }}"
+        "{%- endif %}"
+    )
+    print("tokenizer.chat_template was empty — set ChatML fallback")
 print(f"Tokenizer: {tokenizer.__class__.__name__}  vocab={tokenizer.vocab_size:,}")
 
 # %% [markdown]

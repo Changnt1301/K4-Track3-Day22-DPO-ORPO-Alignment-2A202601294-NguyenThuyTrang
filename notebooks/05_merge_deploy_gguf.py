@@ -68,6 +68,25 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
+# Base (non-Instruct) Qwen2.5 checkpoint — no chat_template shipped. ChatML fallback
+# (also needed here so the merged/GGUF tokenizer_config.json carries a valid template).
+if tokenizer.chat_template is None:
+    tokenizer.chat_template = (
+        "{%- if messages[0]['role'] == 'system' %}"
+        "{{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}"
+        "{%- else %}"
+        "{{- '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- for message in messages %}"
+        "{%- if message['role'] != 'system' %}"
+        "{{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}"
+        "{{- '<|im_start|>assistant\n' }}"
+        "{%- endif %}"
+    )
+
 # Stack SFT-mini → DPO adapters
 SFT_PATH = REPO_ROOT / "adapters" / "sft-mini"
 model = PeftModel.from_pretrained(model, str(SFT_PATH))

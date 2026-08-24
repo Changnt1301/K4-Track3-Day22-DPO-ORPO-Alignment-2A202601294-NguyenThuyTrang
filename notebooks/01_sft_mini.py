@@ -41,7 +41,7 @@ else:  # BIGGPU
     PER_DEVICE_BATCH = 2
     GRAD_ACCUM = 4
 
-SFT_DATASET = os.environ.get("SFT_DATASET", "5CD-AI/Vietnamese-alpaca-cleaned")
+SFT_DATASET = os.environ.get("SFT_DATASET", "saillab/alpaca-vietnamese-cleaned")
 SFT_SLICE = 1000
 NUM_EPOCHS = 1
 
@@ -85,6 +85,27 @@ if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
     print("Set tokenizer.pad_token = eos_token")
 
+# unsloth/Qwen2.5-*-bnb-4bit is the BASE checkpoint (not -Instruct); its
+# tokenizer_config.json ships without a chat_template, so apply_chat_template()
+# raises ValueError unless we set one. Standard Qwen2.5 ChatML fallback.
+if tokenizer.chat_template is None:
+    tokenizer.chat_template = (
+        "{%- if messages[0]['role'] == 'system' %}"
+        "{{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}"
+        "{%- else %}"
+        "{{- '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- for message in messages %}"
+        "{%- if message['role'] != 'system' %}"
+        "{{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
+        "{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}"
+        "{{- '<|im_start|>assistant\n' }}"
+        "{%- endif %}"
+    )
+    print("tokenizer.chat_template was empty (base checkpoint) — set ChatML fallback")
+
 # %%
 model = FastLanguageModel.get_peft_model(
     model,
@@ -106,7 +127,9 @@ print(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requir
 # %% [markdown]
 # ## 2. Load + format VN Alpaca slice
 #
-# `5CD-AI/Vietnamese-alpaca-cleaned` is a 50k-row VN Alpaca translation. Lab 21
+# `saillab/alpaca-vietnamese-cleaned` is a 52k-row VN Alpaca translation
+# (`5CD-AI/Vietnamese-alpaca-cleaned` was removed from the Hub — this is the
+# working replacement with the same instruction/input/output columns). Lab 21
 # uses 1k slice for the demo run; we match that exactly so reward gap is comparable.
 
 # %%
